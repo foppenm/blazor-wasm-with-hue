@@ -1,0 +1,131 @@
+﻿@page "/"
+@using System;
+@using System.Globalization;
+@using Q42.HueApi;
+@using Q42.HueApi.Interfaces;
+
+@inject ILocalHueClient HueClient
+
+<div class="container">
+    <div class="row">
+        <div class="col-8">
+            <p style="color: white; font-size: 120px">@Time</p>
+        </div>
+        <div class="col-2">
+            <button style="height: 175px; width: 175px" type="button" class="btn btn-info" @onclick="Sleep">Slapen</button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-8">
+            <p style="color: white; font-size: 50px">@Date</p>
+        </div>
+        <div class="col-2">
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-sm">
+            <button style="height: 175px; width:175px" type="button" class="btn btn-@DinerColor" @onclick="SwitchDiner">Eetkamer</button>
+        </div>
+        <div class="col-sm">
+            <button style="height: 175px; width: 175px" type="button" class="btn btn-@LivingColor" @onclick="SwitchLivingRoom">Woonkamer</button>
+        </div>
+        <div class="col-sm">
+            <button style="height: 175px; width: 175px" type="button" class="btn btn-@BedRoomColor" @onclick="SwitchBedroom">Slaapkamer</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string Time { get; set; }
+    private string Date { get; set; }
+
+    private string DinerColor { get; set; } = "info";
+    private string LivingColor { get; set; } = "info";
+    private string BedRoomColor { get; set; } = "info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Date = DateTime.Now.AddHours(2).ToString("D", CultureInfo.CreateSpecificCulture("nl-NL"));
+        Time = DateTime.Now.AddHours(2).ToString("HH:mm", CultureInfo.CreateSpecificCulture("nl-NL"));
+
+        System.Timers.Timer aTimer = new System.Timers.Timer();
+        aTimer.Elapsed += new ElapsedEventHandler(OnTimedEvent);
+        aTimer.Interval = 1000;
+        aTimer.Enabled = true;
+    }
+
+    private async void OnTimedEvent(object source, ElapsedEventArgs e)
+    {
+        Date = DateTime.Now.ToString("D", CultureInfo.CreateSpecificCulture("nl-NL"));
+
+        if (Time.Contains(":"))
+            Time = DateTime.Now.AddHours(2).ToString("HH:mm", CultureInfo.CreateSpecificCulture("nl-NL")).Replace(":"," ");
+        else
+            Time = DateTime.Now.AddHours(2).ToString("HH:mm", CultureInfo.CreateSpecificCulture("nl-NL"));
+
+        var groups = await HueClient.GetGroupsAsync();
+        var dinerGroup = groups.First(x => x.Name == "Eet tafel");
+        var livingGroup = groups.First(x => x.Name == "Woonkamer");
+        var bedroomGroup = groups.First(x => x.Name == "Slaapkamer");
+
+        DinerColor = dinerGroup.State.AnyOn.Value ? "success" : "info";
+        LivingColor = livingGroup.State.AnyOn.Value ? "success" : "info";
+        BedRoomColor = bedroomGroup.State.AnyOn.Value ? "success" : "info";
+
+        this.StateHasChanged();
+    }
+
+    private async void SwitchDiner()
+    {
+        var groups = await HueClient.GetGroupsAsync();
+        var group = groups.First(x => x.Name == "Eet tafel");
+        var command = new LightCommand();
+        command.On = !group.State.AnyOn.Value;
+        DinerColor = group.State.AnyOn.Value ? "success" : "info";
+        this.StateHasChanged();
+        await HueClient.SendGroupCommandAsync(command, group.Id);
+    }
+
+    private async void SwitchLivingRoom()
+    {
+        var groups = await HueClient.GetGroupsAsync();
+        var group = groups.First(x => x.Name == "Woonkamer");
+        var command = new LightCommand();
+        command.On = !group.State.AnyOn.Value;
+
+        LivingColor = group.State.AnyOn.Value ? "success" : "info";
+        this.StateHasChanged();
+
+        await HueClient.SendGroupCommandAsync(command, group.Id);
+    }
+
+    private async void SwitchBedroom()
+    {
+        var groups = await HueClient.GetGroupsAsync();
+        var group = groups.First(x => x.Name == "Slaapkamer");
+        var command = new LightCommand();
+        command.On = !group.State.AnyOn.Value;
+
+        BedRoomColor = group.State.AnyOn.Value ? "success" : "info";
+        this.StateHasChanged();
+
+        await HueClient.SendGroupCommandAsync(command, group.Id);
+    }
+
+    private async void Sleep()
+    {
+        var groups = await HueClient.GetGroupsAsync();
+
+        var bedRoomGroup = groups.First(x => x.Name == "Slaapkamer");
+        var livingRoomGroup = groups.First(x => x.Name == "Woonkamer");
+
+        var bedRoomCommand = new LightCommand();
+        bedRoomCommand.On = true;
+
+        var livingRoomsCommand = new LightCommand();
+        livingRoomsCommand.On = false;
+
+        await HueClient.SendGroupCommandAsync(bedRoomCommand, bedRoomGroup.Id);
+        await HueClient.SendGroupCommandAsync(livingRoomsCommand, livingRoomGroup.Id);
+    }
+}
